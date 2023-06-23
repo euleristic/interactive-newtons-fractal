@@ -15,6 +15,7 @@
 #include <span>
 #include <cmath>
 #include <filesystem>
+#include <numbers>
 
 #include <iostream>
 
@@ -86,22 +87,22 @@ namespace euleristic {
 	template<std::floating_point component_type>
 	constexpr glm::mat<3, 3, component_type> translate(const glm::vec<2, component_type> by) {
 		return glm::mat<3, 3, component_type>(
-			glm::vec<3, component_type>(1.0,  0.0,  0.0),
-			glm::vec<3, component_type>(0.0,  1.0,  0.0),
+			glm::vec<3, component_type>(1.0, 0.0, 0.0),
+			glm::vec<3, component_type>(0.0, 1.0, 0.0),
 			glm::vec<3, component_type>(by.x, by.y, 1.0));
 	}
-	
+
 	template<std::floating_point component_type>
 	constexpr glm::mat<3, 3, component_type> scale(const glm::vec<2, component_type> by) {
 		return glm::mat<3, 3, component_type>(
-			glm::vec<3, component_type>(by.x, 0.0,  0.0),
-			glm::vec<3, component_type>(0.0,  by.y, 0.0),
-			glm::vec<3, component_type>(0.0,  0.0,  1.0));
+			glm::vec<3, component_type>(by.x, 0.0, 0.0),
+			glm::vec<3, component_type>(0.0, by.y, 0.0),
+			glm::vec<3, component_type>(0.0, 0.0, 1.0));
 	}
 
 	// So I don't need to add the homogeneous component so often
 	template<size_t length, std::floating_point component_type>
-	constexpr glm::vec<length, component_type> operator*(glm::mat<length + 1, length + 1, component_type> mat, 
+	constexpr glm::vec<length, component_type> operator*(glm::mat<length + 1, length + 1, component_type> mat,
 		glm::vec<length, component_type> vec) noexcept {
 		return (mat * glm::vec<length + 1, component_type>(vec, 1.0)).xy;
 	}
@@ -130,17 +131,52 @@ namespace euleristic {
 		}
 	}
 
-	glm::vec4 generate_color(size_t index) {
-		// Use phi
-		switch (index) {
-		case 0: return glm::vec4(0.0f, 0.0f, 0.70f, 1.0f);
-		case 1: return glm::vec4(0.0f, 0.5f, 0.5f, 1.0f);
-		case 2: return glm::vec4(0.5f, 0.0f, 0.5f, 1.0f);
-		}
+	// Where h, s, v are in [0, 1]
+	glm::vec4 hsv_to_rgba(float hue, float saturation, float value) {
+		// Credit to Wikipedia: https://en.wikipedia.org/wiki/HSL_and_HSV#HSV_to_RGB
+
+		float chroma = value * saturation;
+		float x = chroma * (1.0f - std::fabsf(std::fmodf(hue * 6.0f, 2.0f) - 1.0f));
+
+		glm::vec3 rgb1;
+		if (hue <= 1.0 / 6.0)
+			rgb1 = glm::vec3(chroma, x, 0.0f);
+		else if (hue <= 2.0 / 6.0)
+			rgb1 = glm::vec3(x, chroma, 0.0f);
+		else if (hue <= 3.0 / 6.0)
+			rgb1 = glm::vec3(0.0f, chroma, x);
+		else if (hue <= 4.0 / 6.0)
+			rgb1 = glm::vec3(0.0f, x, chroma);
+		else if (hue <= 5.0 / 6.0)
+			rgb1 = glm::vec3(x, 0.0f, chroma);
+		else
+			rgb1 = glm::vec3(chroma, 0.0f, x);
+
+		float m = value - chroma;
+
+		return glm::vec4(rgb1.r + m, rgb1.g + m, rgb1.b + m, 1.0f);
 	}
 
-	const char* generate_color_list_code(size_t count) {
-		return "vec4(0.0f, 0.0f, 0.70f, 1.0f),\n\tvec4(0.0f, 0.5f, 0.5f, 1.0f),\n\tvec4(0.5f, 0.0f, 0.5f, 1.0f)";
+	glm::vec4 generate_color(const size_t index) {
+		constexpr float saturation = 1.0f;
+		constexpr float value = 0.5f;
+		// I'm sure I'm not the first to think of this, but the palette is basically selected by walking phi 
+		// circumferences around the color wheel from the previous one. Since phi is the "most irrational number",
+		// this method generates the an optimally uniform distribution of colors as the size of the palette approaches infinity.
+		return hsv_to_rgba(fmodf((float)index * std::numbers::phi_v<float>, 1.0), saturation, value);
+	}
+
+	std::string generate_color_list_code(size_t count) {
+		std::string code;
+		for (size_t i = 0; i < count; ++i) {
+			auto color = generate_color(i);
+			code += "vec4(" + std::to_string(color.r) + ", " + std::to_string(color.g) + ", "
+				+ std::to_string(color.b) + ", " + std::to_string(color.a) + ')';
+			if (i + 1 < count) {
+				code += ",\n\t";
+			}
+		}
+		return code;
 	}
 
 	constexpr const char* reflect_GL_error(GLenum code) {
@@ -185,14 +221,14 @@ namespace euleristic {
 
 	// Fractal Window
 
-	void fractal_window::set_shaders() {
+	void fractal_window::recompile_shaders() {
 
 		// Complete fractal shader
 
 		std::string source = replace_all_of(fractal_fragment_shader_source_template, "TEMPLATE_DEGREE", std::to_string(zeros.size()));
 		source = replace_all_of(source, "TEMPLATE_ITERATION_COUNT", std::to_string(iteration_count));
 		source = replace_all_of(source, "TEMPLATE_EPSILON_SQR", std::to_string(epsilon_squared));
-		source = replace_all_of(source, "TEMPLATE_COLOR_LIST", generate_color_list_code(zeros.size()));
+		source = replace_all_of(source, "TEMPLATE_COLOR_LIST", generate_color_list_code(zeros.size()).c_str());
 
 		compile_shader(fractal_fragment_shader, source.c_str(), "Fractal Fragment Shader");
 
@@ -207,7 +243,7 @@ namespace euleristic {
 			glGetProgramInfoLog(fractal_shader_program, 512, nullptr, info_log);
 			throw graphics_error{ "SHADER_LINKING_ERROR", info_log };
 		}
-		
+
 		// Complete zeros shader
 
 		source = replace_all_of(zeros_fragment_shader_source_template, "TEMPLATE_RADIUS_SQR", std::to_string(zero_inner_radius_ratio));
@@ -224,6 +260,27 @@ namespace euleristic {
 			glGetProgramInfoLog(zeros_shader_program, 512, nullptr, info_log);
 			throw graphics_error{ "SHADER_LINKING_ERROR", info_log };
 		}
+
+		// Get uniforms
+
+		fractal_screen_rect_uniform = glGetUniformLocation(fractal_shader_program, "fractal_space_screen_rect");
+		fractal_coefficients_uniform = glGetUniformLocation(fractal_shader_program, "coefficients");
+		fractal_zeros_uniform = glGetUniformLocation(fractal_shader_program, "zeros");
+
+		zeros_transform_uniform = glGetUniformLocation(zeros_shader_program, "transform");
+		zeros_color_uniform = glGetUniformLocation(zeros_shader_program, "color");
+	}
+
+	void fractal_window::add_zero(const std::complex<double> zero) noexcept {
+		zeros.push_back(zero);
+		recompile_shaders();
+		coefficients = zeros_to_coefficients(zeros);
+	}
+
+	void fractal_window::remove_zero(const size_t index) {
+		zeros.erase(zeros.cbegin() + index);
+		recompile_shaders();
+		coefficients = zeros_to_coefficients(zeros);
 	}
 
 	fractal_window::fractal_window(int width, int height) {
@@ -232,7 +289,7 @@ namespace euleristic {
 
 		fractal_to_screen_space = translate(glm::dvec2(0.5 * window_width, 0.5 * window_height))
 			* scale(glm::dvec2(initial_pixels_per_unit, -initial_pixels_per_unit));
-		
+
 		screen_to_fractal_space = glm::inverse(fractal_to_screen_space);
 
 		zeros.push_back({ -1.0, 0.0 });
@@ -285,16 +342,7 @@ namespace euleristic {
 
 		// Complete and compile shader templates, and link shaders
 
-		set_shaders();
-
-		// Get uniforms
-
-		fractal_screen_rect_uniform = glGetUniformLocation(fractal_shader_program, "fractal_space_screen_rect");
-		fractal_coefficients_uniform = glGetUniformLocation(fractal_shader_program, "coefficients");
-		fractal_zeros_uniform = glGetUniformLocation(fractal_shader_program, "zeros");
-
-		zeros_transform_uniform = glGetUniformLocation(zeros_shader_program, "transform");
-		zeros_color_uniform = glGetUniformLocation(zeros_shader_program, "color");
+		recompile_shaders();
 
 		// Square vertex array (the same for both shader, nice)
 
@@ -322,12 +370,12 @@ namespace euleristic {
 		glfwSetWindowTitle(window, title);
 	}
 
-	void fractal_window::update_zoom() noexcept {
+	void fractal_window::handle_scroll_wheel() noexcept {
 		if (scroll_delta == 0.0) return;
 		auto mouse_pos = mouse_position();
 		auto scale_factor = std::pow(zoom_rate, -scroll_delta);
 
-		glm::dmat3 delta (
+		glm::dmat3 delta(
 			scale_factor, 0.0, 0.0,
 			0.0, scale_factor, 0.0,
 			(1.0 - scale_factor) * (mouse_pos.x * screen_to_fractal_space[0][0] + screen_to_fractal_space[2][0]),
@@ -339,20 +387,23 @@ namespace euleristic {
 		scroll_delta = 0.0;
 	}
 
-	void fractal_window::update_pan() noexcept {
-		bool current_state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS;
+	void fractal_window::handle_mouse_buttons() noexcept {
+		// Left button
+
+		bool current_left_state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS;
 		auto current_mouse_pos = mouse_position();
 
 		// Did the press begin this frame?
-		if (!last_mouse_button_state && current_state) {
+		if (!last_left_mouse_button_state && current_left_state) {
 			for (size_t i = 0; i < zeros.size(); ++i) {
 				if (glm::length2(current_mouse_pos - fractal_to_screen_space * glm::dvec2(zeros[i].real(), zeros[i].imag())) < zero_total_radius_sqr) {
 					held_zero = i;
+					break;
 				}
 			}
 		}
 		// Is the press continuing?
-		else if (last_mouse_button_state && current_state) {
+		else if (last_left_mouse_button_state && current_left_state) {
 			if (held_zero) {
 				auto zero = screen_to_fractal_space * current_mouse_pos;
 				zeros[*held_zero] = std::complex(zero.x, zero.y);
@@ -364,11 +415,44 @@ namespace euleristic {
 			}
 		}
 		// Was the button released?
-		else if (last_mouse_button_state && !current_state) {
+		else if (last_left_mouse_button_state && !current_left_state) {
 			held_zero = {};
 		}
 		last_mouse_pos = current_mouse_pos;
-		last_mouse_button_state = current_state;
+		last_left_mouse_button_state = current_left_state;
+
+		// Right button
+		bool current_right_state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS;
+
+		// Did the press begin this frame?
+		if (!last_right_mouse_button_state && current_right_state) {
+			for (size_t i = 0; i < zeros.size(); ++i) {
+				if (glm::length2(current_mouse_pos - fractal_to_screen_space * glm::dvec2(zeros[i].real(), zeros[i].imag())) < zero_total_radius_sqr) {
+					zero_to_remove = i;
+					break;
+				}
+			}
+		}
+		// Was the button released?
+		else if (last_right_mouse_button_state && !current_right_state) {
+			if (zero_to_remove) {
+				for (size_t i = 0; i < zeros.size(); ++i) {
+					if (glm::length2(current_mouse_pos - fractal_to_screen_space * glm::dvec2(zeros[i].real(), zeros[i].imag())) < zero_total_radius_sqr) {
+						if (zero_to_remove == i) {
+							remove_zero(i);
+							break;
+						}
+					}
+				}
+			}
+			else {
+				auto zero = screen_to_fractal_space * current_mouse_pos;
+				add_zero(std::complex(zero.x, zero.y));
+			}
+			zero_to_remove = {};
+		}
+
+		last_right_mouse_button_state = current_right_state;
 	}
 
 	bool fractal_window::should_close() const noexcept {
@@ -398,14 +482,14 @@ namespace euleristic {
 
 		glUseProgram(zeros_shader_program);
 		for (size_t i = 0; i < zeros.size(); ++i) {
-			auto transform = screen_to_normal_space * translate(glm::mat3(fractal_to_screen_space) * glm::vec2(zeros[i].real(), zeros[i].imag())) 
+			auto transform = screen_to_normal_space * translate(glm::mat3(fractal_to_screen_space) * glm::vec2(zeros[i].real(), zeros[i].imag()))
 				* zero_scale;
 			glUniformMatrix3fv(zeros_transform_uniform, 1, GL_FALSE, glm::value_ptr(glm::mat3(transform)));
 			auto color = generate_color(i);
 			glUniform4f(zeros_color_uniform, color.r, color.g, color.b, color.a);
 			glDrawArrays(GL_TRIANGLES, 0, 6);
 		}
-		
+
 		glBindVertexArray(0);
 		glfwSwapBuffers(window);
 
@@ -422,10 +506,6 @@ namespace euleristic {
 	}
 
 	fractal_window::~fractal_window() noexcept {
-		/*glDeleteBuffers(1, &zeros_vbo);
-		glDeleteVertexArrays(1, &zeros_vao);
-		glDeleteBuffers(1, &fractal_vbo);
-		glDeleteVertexArrays(1, &fractal_vao);*/
 		glDeleteBuffers(1, &normal_square_vbo);
 		glDeleteVertexArrays(1, &normal_square_vao);
 		glDeleteShader(zeros_fragment_shader);

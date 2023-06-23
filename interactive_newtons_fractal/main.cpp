@@ -12,8 +12,8 @@ auto main() -> int {
 		std::chrono::duration<double, std::milli> delta_time{};
 		while (!fractal.should_close()) {
 			
-			fractal.update_zoom();
-			fractal.update_pan();
+			fractal.handle_scroll_wheel();
+			fractal.handle_mouse_buttons();
 			fractal.render();
 			fractal.poll_events();
 

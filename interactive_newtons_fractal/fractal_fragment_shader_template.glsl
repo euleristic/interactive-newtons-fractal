@@ -1,6 +1,6 @@
 #version 410 core
 
-// This shader renders Newton's fractal.
+// This shader renders a Newton's fractal.
 // It does this by seeing what zero the seed value represented by the pixel approaches under Newton's method, coloring it accordingly.
 // If the iterated value is not within the allowed error sqrt(TEMPLATE_EPSILON_SQR) of a zero after TEMPLATE_ITERATION_COUNT iterations,
 // the pixel is left black.

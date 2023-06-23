@@ -28,16 +28,12 @@ namespace euleristic {
 		unsigned int normal_square_vbo{};
 		unsigned int normal_square_vao{};
 
-		/*unsigned int fractal_vbo{};
-		unsigned int zeros_vbo{};*/
 		unsigned int fractal_vertex_shader{};
 		unsigned int fractal_fragment_shader{};
 		unsigned int fractal_shader_program{};
 		unsigned int zeros_vertex_shader{};
 		unsigned int zeros_fragment_shader{};
 		unsigned int zeros_shader_program{};
-		/*unsigned int fractal_vao{};
-		unsigned int zeros_vao{};*/
 		unsigned int fractal_screen_rect_uniform{};
 		unsigned int fractal_coefficients_uniform{};
 		unsigned int fractal_zeros_uniform{};
@@ -49,15 +45,19 @@ namespace euleristic {
 
 		glm::dvec2 last_mouse_pos;
 		std::optional<size_t> held_zero{};
-		bool last_mouse_button_state{};
+		std::optional<size_t> zero_to_remove{};
+		bool last_left_mouse_button_state{};
+		bool last_right_mouse_button_state{};
 
-		void set_shaders();
+		void recompile_shaders();
+		void add_zero(const std::complex<double> zero) noexcept;
+		void remove_zero(const size_t index);
 
 	public:
-		void update_zoom() noexcept;
-		void update_pan() noexcept;
+		void handle_scroll_wheel() noexcept;
+		void handle_mouse_buttons() noexcept;
 		double epsilon_squared = 0.1;
-		unsigned int iteration_count = 20;
+		unsigned iteration_count = 20;
 
 		fractal_window(int width, int height);
 		void set_title(const char* title) noexcept;
