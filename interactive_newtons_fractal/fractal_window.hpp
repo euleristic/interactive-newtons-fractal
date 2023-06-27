@@ -11,7 +11,7 @@ struct GLFWwindow;
 namespace euleristic {
 
 	struct graphics_error {
-		const char* code_name, * message;
+		std::string code_name, message;
 	};
 
 	// This class encapsulates an OpenGL context, manages the visuals and handles devices input.

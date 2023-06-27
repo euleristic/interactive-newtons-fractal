@@ -17,8 +17,6 @@
 #include <filesystem>
 #include <numbers>
 
-#include <iostream>
-
 using namespace std::string_literals;
 
 namespace euleristic {
@@ -127,7 +125,7 @@ namespace euleristic {
 		if (!success) {
 			char info_log[512];
 			glGetShaderInfoLog(shader_id, 512, nullptr, info_log);
-			throw graphics_error{ ("COMPILATION_ERROR in : "s + shader_name).c_str(), info_log };
+			throw graphics_error{ "COMPILATION_ERROR in : "s + shader_name, info_log };
 		}
 	}
 
@@ -178,6 +176,8 @@ namespace euleristic {
 		}
 		return code;
 	}
+
+	// Can't wait for reflection in C++41!
 
 	constexpr const char* reflect_GL_error(GLenum code) {
 		switch (code) {
@@ -439,7 +439,8 @@ namespace euleristic {
 				for (size_t i = 0; i < zeros.size(); ++i) {
 					if (glm::length2(current_mouse_pos - fractal_to_screen_space * glm::dvec2(zeros[i].real(), zeros[i].imag())) < zero_total_radius_sqr) {
 						if (zero_to_remove == i) {
-							remove_zero(i);
+							if (zeros.size() > 1)
+								remove_zero(i);
 							break;
 						}
 					}
